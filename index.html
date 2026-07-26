@@ -27,8 +27,8 @@
   .tab.active { background: #FBFAF6; color: #2E3532; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
   .card { background: #FBFAF6; border: 1px solid #E4E1D5; border-radius: 14px; padding: 20px; margin-bottom: 12px; }
   label.field-label { font-size: 13px; font-weight: 600; color: #5B6B5C; display: block; margin-bottom: 6px; }
-  textarea, input[type="text"] { width: 100%; border: 1px solid #DAD6C9; background: #FBFAF6; border-radius: 8px; padding: 10px 12px; font-size: 15px; color: #2E3532; outline: none; font-family: inherit; }
-  textarea:focus, input[type="text"]:focus { border-color: #7C9885; }
+  textarea, input[type="text"], input[type="date"], input[type="time"] { width: 100%; border: 1px solid #DAD6C9; background: #FBFAF6; border-radius: 8px; padding: 10px 12px; font-size: 15px; color: #2E3532; outline: none; font-family: inherit; }
+  textarea:focus, input[type="text"]:focus, input[type="date"]:focus, input[type="time"]:focus { border-color: #7C9885; }
   .field { margin-bottom: 16px; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chip { padding: 6px 12px; border-radius: 20px; border: 1px solid #E4E1D5; background: #FBFAF6; color: #8A8F86; font-size: 13px; cursor: pointer; }
@@ -58,8 +58,8 @@
   .cal-title { font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600; text-transform: capitalize; }
   .cal-nav { background: #E8E5DA; border: none; border-radius: 8px; width: 32px; height: 32px; font-size: 16px; color: #4C6B5C; cursor: pointer; }
   .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 11px; color: #8A8F86; font-weight: 600; margin-bottom: 6px; }
-  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-  .cal-cell { aspect-ratio: 1; border: none; background: transparent; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; position: relative; color: #2E3532; font-size: 13px; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 42px; gap: 4px; }
+  .cal-cell { border: none; background: transparent; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; position: relative; color: #2E3532; font-size: 13px; height: 100%; width: 100%; padding: 0; }
   .cal-cell.empty { cursor: default; }
   .cal-cell.has-entries { background: #7C988518; }
   .cal-cell.is-today .cal-day-num { font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
@@ -93,12 +93,20 @@ const DIAS_SEMANA = ["L","M","X","J","V","S","D"];
 
 function todayObj(){ return new Date(); }
 
+function pad2(n){ return String(n).padStart(2, "0"); }
+function todayISO(){ const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
+function nowHHMM(){ const d = new Date(); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+function isoToDisplayFecha(iso){ const [y,m,d] = iso.split("-"); return `${d}/${m}/${y}`; }
+function displayFechaToISO(fecha){ const [d,m,y] = fecha.split("/"); return `${y}-${m}-${d}`; }
+
 let state = {
   view: "inicio",
   entries: loadEntries(),
   calMonth: todayObj().getMonth(),
   calYear: todayObj().getFullYear(),
   selectedFecha: null,
+  entryFecha: todayISO(),
+  entryHora: nowHHMM(),
   incidencia: "", pensamiento: "", sentimiento: "Ansiedad", sentimientoOtro: "",
   intensidad: 5, creencia: 5, veracidad: 5, plausible: null, motivo: "",
   justSaved: false, copiedFecha: null,
@@ -108,6 +116,7 @@ function resetForm(){
   state.incidencia = ""; state.pensamiento = ""; state.sentimiento = "Ansiedad";
   state.sentimientoOtro = ""; state.intensidad = 5; state.creencia = 5; state.veracidad = 5;
   state.plausible = null; state.motivo = "";
+  state.entryFecha = todayISO(); state.entryHora = nowHHMM();
 }
 
 function canSave(){
@@ -116,10 +125,13 @@ function canSave(){
 
 function handleSave(){
   if(!canSave()) return;
-  const now = new Date();
+  const fecha = isoToDisplayFecha(state.entryFecha);
+  const hora = state.entryHora;
+  const [y, m, d] = state.entryFecha.split("-").map(Number);
+  const [hh, mm] = state.entryHora.split(":").map(Number);
+  const ts = new Date(y, m - 1, d, hh, mm).getTime();
   const entry = {
-    id: uid(), ts: now.getTime(), fecha: todayKey(now),
-    hora: now.toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}),
+    id: uid(), ts, fecha, hora,
     incidencia: state.incidencia.trim(), pensamiento: state.pensamiento.trim(),
     sentimiento: state.sentimiento === "Otro" ? (state.sentimientoOtro.trim() || "Otro") : state.sentimiento,
     intensidad: state.intensidad, creencia: state.creencia, veracidad: state.veracidad,
@@ -200,6 +212,16 @@ function sliderRow(id, label, value, hint){
 function renderRegistrar(){
   return `
     <div class="card">
+      <div class="field" style="display:flex; gap:10px;">
+        <div style="flex:1;">
+          <label class="field-label">Fecha</label>
+          <input type="date" id="in-fecha" value="${state.entryFecha}" />
+        </div>
+        <div style="flex:1;">
+          <label class="field-label">Hora</label>
+          <input type="time" id="in-hora" value="${state.entryHora}" />
+        </div>
+      </div>
       <div class="field">
         <label class="field-label">¿Qué pasó justo antes? (incidencia)</label>
         <textarea rows="2" id="in-incidencia" placeholder="Ej: noté una molestia en el pecho al subir escaleras">${esc(state.incidencia)}</textarea>
@@ -279,7 +301,10 @@ function renderInicio(){
       ${selected ? `
         <div class="day-header">
           <div class="day-title">${selected}</div>
-          ${dayEntries.length ? `<button class="copy-btn" data-copy="${esc(selected)}">${state.copiedFecha===selected ? "Copiado ✓" : "Copiar para la tabla"}</button>` : ""}
+          <div style="display:flex; gap:8px;">
+            <button class="copy-btn" data-add-day="${esc(selected)}">+ Añadir aquí</button>
+            ${dayEntries.length ? `<button class="copy-btn" data-copy="${esc(selected)}">${state.copiedFecha===selected ? "Copiado ✓" : "Copiar para la tabla"}</button>` : ""}
+          </div>
         </div>
         ${dayEntries.length === 0 ? `<div class="empty" style="padding:30px 20px;">Sin registros ese día.</div>` : dayEntries.map(e => `
           <div class="entry">
@@ -370,6 +395,17 @@ function attachEvents(){
   document.querySelectorAll("[data-cal-day]").forEach(btn => {
     btn.onclick = () => { state.selectedFecha = btn.dataset.calDay; render(); };
   });
+  document.querySelectorAll("[data-add-day]").forEach(btn => {
+    btn.onclick = () => {
+      state.entryFecha = displayFechaToISO(btn.dataset.addDay);
+      state.view = "registrar";
+      render();
+    };
+  });
+  const inFecha = document.getElementById("in-fecha");
+  if(inFecha) inFecha.onchange = e => { state.entryFecha = e.target.value; };
+  const inHora = document.getElementById("in-hora");
+  if(inHora) inHora.onchange = e => { state.entryHora = e.target.value; };
   const inInc = document.getElementById("in-incidencia");
   if(inInc) inInc.oninput = e => { state.incidencia = e.target.value; toggleSaveBtn(); };
   const inPen = document.getElementById("in-pensamiento");
